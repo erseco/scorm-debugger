@@ -3,84 +3,148 @@
     // Elements table.
     var elementsTable;
 
-    // SCORM API object.
-    var API;
-    function FindAPI(win) {
-        var nFindAPITries = 0;
-        var API = null;
-        while ((win.API == null) && (win.parent != null) && (win.parent != win)) {
-            nFindAPITries ++;
-            if (nFindAPITries > 500) {
-                alert("Error in finding API -- too deeply nested.");
-                return null;
-            }
-            win = win.parent;
-        }
-        return win.API;
-    }
+    // SCORM API object (using our local simulated API).
+    var API = window.API;
+
+    // Log dialog reference.
+    var logDialog;
+
+    // Current loaded SCOs
+    var currentScos = [];
 
     function initAPI() {
-        if ((window.parent) && (window.parent != window)){
-            API = FindAPI(window.parent);
+        // Use the local SCORM API simulation
+        API = window.API;
+        if (!API) {
+            console.error('SCORM API not found');
+            return;
         }
-        if ((API == null) && (window.opener != null)){
-            API = FindAPI(window.opener);
+
+        // Register callback for data changes (to update debugger in real-time)
+        API.onChange(function(element, value, operation) {
+            if (operation === 'set' && element) {
+                updateTableRow(element, value);
+            }
+            if (operation === 'initialize') {
+                updateApiStatus(true);
+                // Reload the elements table
+                if (elementsTable) {
+                    elementsTable.clear();
+                    loadReadElements();
+                }
+            }
+            if (operation === 'finish') {
+                updateApiStatus(false);
+            }
+            if (operation === 'reset') {
+                updateApiStatus(false);
+                if (elementsTable) {
+                    elementsTable.clear().draw();
+                }
+            }
+            // Log the operation
+            if (operation !== 'get') {
+                log(operation.toUpperCase() + (element ? ': ' + element + ' = ' + value : ''), '0');
+            }
+        });
+    }
+
+    function updateApiStatus(initialized) {
+        var statusEl = $('#api-status');
+        if (initialized) {
+            statusEl.removeClass('status-not-initialized').addClass('status-initialized').text('Initialized');
+        } else {
+            statusEl.removeClass('status-initialized').addClass('status-not-initialized').text('Not initialized');
         }
-        if (API == null) {
-            alert("No API adapter found");
-        }
-        else {
-            API.LMSInitialize("");
+    }
+
+    function updateTableRow(element, value) {
+        if (!elementsTable) return;
+
+        // Find if row exists
+        var found = false;
+        elementsTable.rows().every(function() {
+            var data = this.data();
+            if (data[0] === element) {
+                // Update the row
+                var description = '';
+                if (typeof dataModelDescription !== 'undefined' && dataModelDescription[element]) {
+                    description = dataModelDescription[element].description;
+                }
+                this.data([element, value, description]).draw(false);
+                found = true;
+                return false; // break
+            }
+        });
+
+        // If not found, add new row
+        if (!found) {
+            var description = '';
+            var normalizedElement = element.replace(/\.\d+\./g, '.n.');
+            if (typeof dataModelDescription !== 'undefined' && dataModelDescription[normalizedElement]) {
+                description = dataModelDescription[normalizedElement].description;
+            }
+            elementsTable.row.add([element, value, description]).draw(false);
         }
     }
 
     // Load elements for auto-completion.
     var availableElements = [];
-    $.each(dataModel, function(element, properties) {
-        availableElements.push(element);
-    });
+    if (typeof dataModel !== 'undefined') {
+        $.each(dataModel, function(element, properties) {
+            availableElements.push(element);
+        });
+    }
 
     /**
      * Load the remote (only read) element values
      */
     function loadReadElements() {
+        if (!API || !API.isInitialized()) {
+            return;
+        }
+
         var value, description;
         $.each(dataModel, function(element, properties) {
             if (element.indexOf('.n.') === -1 && (properties.mod == 'rw' || properties.mod == 'r')) {
-                if (typeof  dataModelDescription[element] != 'undefined') {
+                if (typeof dataModelDescription[element] != 'undefined') {
                     description = dataModelDescription[element].description;
                 } else {
                     description = '';
                 }
-                value = getElement(element);
+                value = getElement(element, true); // silent mode
                 if (typeof value == "string") {
                     value = value.replace(/,/g, ", ");
                 }
 
-                elementsTable.row.add([element, value, description]).draw();
+                elementsTable.row.add([element, value, description]).draw(false);
             }
         });
-        var objectivesCount = getElement("cmi.objectives._count");
+
+        // Load objectives if any
+        var objectivesCount = getElement("cmi.objectives._count", true);
         if (objectivesCount > 0) {
             for (var i = 0; i < objectivesCount; i++) {
                 var objEl = ["id", "score.raw", "score.min", "score.max", "status"];
                 objEl.forEach(function(child) {
-                    element = "cmi.objectives." + i + "." + child;
-                    value = getElement(element);
+                    var element = "cmi.objectives." + i + "." + child;
+                    value = getElement(element, true);
                     if (typeof value == "string") {
                         value = value.replace(/,/g, ", ");
                     }
-                    elementsTable.row.add([element, value, ""]).draw();
+                    elementsTable.row.add([element, value, ""]).draw(false);
                 });
             }
         }
+
+        elementsTable.draw();
     }
 
     function displayElementInfo(element) {
         // Normalize element (replace .X. elements with .n. ones).
         element = element.replace(/.\d+./,".n.");
         $("#debugger-element-description").html('');
-        if (typeof dataModel[element] != 'undefined') {
+        if (typeof dataModel !== 'undefined' && typeof dataModel[element] != 'undefined') {
             var info = "<p><strong>Element information</strong></p>";
             if (typeof dataModelDescription[element] != 'undefined') {
                 info += "<p>Data type: " + dataModelDescription[element].datatype + "</p>";
@@ -95,7 +159,7 @@
         var timeNow = new Date().toLocaleTimeString();
         // Error information.
         var errorString = "";
-        if (error != "0") {
+        if (error != "0" && API) {
             errorString = " ERROR: " + API.LMSGetErrorString(error);
         }
         $("#log").prepend("<p>" + timeNow + ": " + data + errorString + "</p>");
@@ -104,12 +168,16 @@
     /**
      * Get an element from the LMS
      * @param  {string} element element name
-     * @return {number}         error number, 0 means OK
+     * @param  {boolean} silent if true, don't log
+     * @return {string}         element value
      */
-    function getElement(element) {
+    function getElement(element, silent) {
+        if (!API) return '';
         var result = API.LMSGetValue(element);
         var error = API.LMSGetLastError();
-        log("Get element: " + element + " returned value was: " + result, error);
+        if (!silent) {
+            log("Get element: " + element + " returned value was: " + result, error);
+        }
         return result;
     }
 
@@ -117,9 +185,10 @@
      * Save element in the LMS (not commiting the results)
      * @param  {string} element element name
      * @param  {string} value   element value
-     * @return {number}         error number, 0 means OK
+     * @return {string}         result
      */
     function setElement(element, value) {
+        if (!API) return 'false';
         var result = API.LMSSetValue(element, value);
         var error = API.LMSGetLastError();
         log("Save element:" + element + " with value: " + value, error);
@@ -127,6 +196,7 @@
     }
 
     function commitValues() {
+        if (!API) return;
         var result = API.LMSCommit("");
         var error = API.LMSGetLastError();
         log("LMSCommit called, returned: " + result, error);
@@ -157,16 +227,22 @@
     }
 
     function launchTests() {
+        if (!API || !API.isInitialized()) {
+            alert('Please launch a SCO first to initialize the API');
+            return;
+        }
+
         var output = $('#tests-output');
+        output.empty();
 
         var interactionsCount = parseInt(API.LMSGetValue('cmi.interactions._count'));
         var objectivesCount = parseInt(API.LMSGetValue('cmi.objectives._count'));
 
         if (interactionsCount > 0) {
-            output.append('<p>Interactions tests may fail, you already have ' + interactionsCount + 'stored in the LMS</p>');
+            output.append('<p>Interactions tests may fail, you already have ' + interactionsCount + ' stored in the LMS</p>');
         }
         if (objectivesCount > 0) {
-            output.append('<p>Objectives tests may fail, you already have ' + objectivesCount + 'stored in the LMS</p>');
+            output.append('<p>Objectives tests may fail, you already have ' + objectivesCount + ' stored in the LMS</p>');
         }
 
         // Get last error.
@@ -311,20 +387,225 @@
 
     }
 
+    // ==========================================
+    // ZIP Loading and SCO Launching Functions
+    // ==========================================
+
+    function showLoadZone() {
+        $('#load-zone').show();
+        $('#main-container').hide();
+        $('#load-error').text('');
+        $('#load-progress').text('');
+    }
+
+    function showMainContainer() {
+        $('#load-zone').hide();
+        $('#main-container').show();
+    }
+
+    function handleFileSelect(file) {
+        if (!file) return;
+
+        $('#load-error').text('');
+        $('#load-progress').text('Loading package...');
+
+        ZipLoader.loadZip(file).then(function(result) {
+            $('#load-progress').text('');
+
+            // Update package name
+            $('#package-name').text(result.packageName);
+
+            // Populate SCO selector
+            var selector = $('#sco-selector');
+            selector.empty();
+            selector.append('<option value="">-- Select SCO --</option>');
+
+            currentScos = result.scos;
+            result.scos.forEach(function(sco, index) {
+                var title = sco.title || sco.identifier || ('SCO ' + (index + 1));
+                selector.append('<option value="' + index + '">' + title + '</option>');
+            });
+
+            // Enable launch button when SCO is selected
+            selector.off('change').on('change', function() {
+                var selected = $(this).val();
+                $('#launch-btn').prop('disabled', selected === '');
+            });
+
+            // Show main container
+            showMainContainer();
+
+            log('Package loaded: ' + result.packageName + ' (' + result.scos.length + ' SCOs found)', '0');
+
+        }).catch(function(error) {
+            $('#load-progress').text('');
+            $('#load-error').text('Error: ' + error.message);
+            console.error('Error loading package:', error);
+        });
+    }
+
+    // Global function to handle page navigation from within the SCO
+    window._scormLoadPage = function(href) {
+        console.log('[Debugger] Navigation request:', href);
+        ZipLoader.navigateToPage(href).then(function(htmlContent) {
+            var iframe = document.getElementById('sco-frame');
+            iframe.srcdoc = htmlContent;
+            log('Navigated to: ' + href, '0');
+        }).catch(function(error) {
+            console.error('Navigation error:', error);
+            alert('Could not navigate to: ' + href);
+        });
+    };
+
+    function launchSCO() {
+        var scoIndex = $('#sco-selector').val();
+        if (scoIndex === '' || !currentScos[scoIndex]) {
+            alert('Please select a SCO first');
+            return;
+        }
+
+        var sco = currentScos[scoIndex];
+
+        // Reset API state
+        API.reset();
+
+        // Show iframe, hide placeholder
+        $('#content-placeholder').hide();
+        $('#sco-frame').show();
+
+        // Get SCO content and load it using srcdoc for same-origin access
+        ZipLoader.getScoContent(sco).then(function(htmlContent) {
+            var iframe = document.getElementById('sco-frame');
+
+            // Use srcdoc to load content - this inherits the parent's origin
+            // so the iframe can access window.parent.API directly
+            iframe.srcdoc = htmlContent;
+
+            log('Launching SCO: ' + (sco.title || sco.identifier), '0');
+
+        }).catch(function(error) {
+            console.error('Error launching SCO:', error);
+            alert('Error launching SCO: ' + error.message);
+        });
+    }
+
+    function resetData() {
+        if (confirm('Reset all SCORM data? The SCO will need to be relaunched.')) {
+            API.reset();
+            elementsTable.clear().draw();
+            $('#sco-frame').attr('src', 'about:blank').hide();
+            $('#content-placeholder').show();
+            log('Data reset', '0');
+        }
+    }
+
+    // ==========================================
+    // Resizable panels
+    // ==========================================
+
+    function initResizer() {
+        var resizer = document.getElementById('resizer');
+        var leftPanel = document.getElementById('content-panel');
+        var rightPanel = document.getElementById('debugger-panel');
+
+        var startX, startWidthLeft, startWidthRight;
+
+        function startResize(e) {
+            startX = e.clientX;
+            startWidthLeft = leftPanel.offsetWidth;
+            startWidthRight = rightPanel.offsetWidth;
+            document.addEventListener('mousemove', resize);
+            document.addEventListener('mouseup', stopResize);
+            e.preventDefault();
+        }
+
+        function resize(e) {
+            var diff = e.clientX - startX;
+            var newLeftWidth = startWidthLeft + diff;
+            var newRightWidth = startWidthRight - diff;
+
+            // Minimum widths
+            if (newLeftWidth > 200 && newRightWidth > 300) {
+                leftPanel.style.flex = 'none';
+                leftPanel.style.width = newLeftWidth + 'px';
+                rightPanel.style.width = newRightWidth + 'px';
+            }
+        }
+
+        function stopResize() {
+            document.removeEventListener('mousemove', resize);
+            document.removeEventListener('mouseup', stopResize);
+        }
+
+        resizer.addEventListener('mousedown', startResize);
+    }
+
+    // ==========================================
     // Set-up everything.
+    // ==========================================
     $(document).ready(function(){
         initAPI();
-        $("#options-tabs").tabs();
 
-        logDialog = $("#log-dialog").dialog({
-          position: { my: "right bottom", at: "right bottom", of: window },
-          height: '300'
+        // Dropzone functionality
+        var dropzone = document.getElementById('dropzone');
+        var fileInput = document.getElementById('file-input');
+
+        dropzone.addEventListener('click', function() {
+            fileInput.click();
         });
 
-        // Load remote elements (this can be slow).
-        elementsTable = $('#elementstable').DataTable({paging: false});
-        loadReadElements();
+        dropzone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
 
+        dropzone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+        });
+
+        dropzone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            var files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        // Toolbar buttons
+        $('#launch-btn').on('click', launchSCO);
+        $('#reset-btn').on('click', resetData);
+        $('#load-another').on('click', function() {
+            API.reset();
+            ZipLoader.cleanup();
+            $('#sco-frame').attr('src', 'about:blank');
+            showLoadZone();
+        });
+
+        // Initialize resizer
+        initResizer();
+
+        // Initialize tabs
+        $("#options-tabs").tabs();
+
+        // Initialize log dialog
+        logDialog = $("#log-dialog").dialog({
+          position: { my: "right bottom", at: "right bottom", of: window },
+          height: '300',
+          autoOpen: false
+        });
+
+        // Initialize DataTable
+        elementsTable = $('#elementstable').DataTable({paging: false, searching: true});
+
+        // Reload button
         $("#reload").button({
           icons: {
             primary: "ui-icon-refresh"
@@ -334,6 +615,7 @@
             loadReadElements();
         });
 
+        // Log toggle button
         $("#show-log").button({
           icons: {
             primary: "ui-icon-info"
@@ -382,29 +664,48 @@
 
         // Save action
         $("#set-value").on('click', function(e) {
+            if (!API || !API.isInitialized()) {
+                alert('Please launch a SCO first to initialize the API');
+                return;
+            }
             dialog.dialog("open");
         });
 
         // Commit action
         $("#commit-value, #commit-common, #commit-interactions, #commit-testdata").on('click', function(e) {
+            if (!API || !API.isInitialized()) {
+                alert('Please launch a SCO first to initialize the API');
+                return;
+            }
             commitValues();
         });
 
-
         $("#get-value").on('click', function(e) {
-            var val =  getElement($("#element").val());
+            if (!API || !API.isInitialized()) {
+                alert('Please launch a SCO first to initialize the API');
+                return;
+            }
+            var val = getElement($("#element").val());
             $("#debugger-element-value").html("<strong>Value: </strong>" + val);
         });
 
-        // Commom operations.
+        // Common operations.
         $( "#set-lesson-status" ).selectmenu({
             change: function( event, data ) {
+                if (!API || !API.isInitialized()) {
+                    alert('Please launch a SCO first to initialize the API');
+                    return;
+                }
                 setElement('cmi.core.lesson_status', data.item.value);
             }
         });
 
         $( "#set-score" ).selectmenu({
             change: function( event, data ) {
+                if (!API || !API.isInitialized()) {
+                    alert('Please launch a SCO first to initialize the API');
+                    return;
+                }
                 setElement('cmi.core.score.min', 0);
                 setElement('cmi.core.score.max', 10);
                 setElement('cmi.core.score.raw', data.item.value);
@@ -413,12 +714,20 @@
 
         $( "#set-exit" ).selectmenu({
             change: function( event, data ) {
+                if (!API || !API.isInitialized()) {
+                    alert('Please launch a SCO first to initialize the API');
+                    return;
+                }
                 setElement('cmi.core.exit', data.item.value);
             }
         });
 
         $( "#set-nav-event" ).selectmenu({
             change: function( event, data ) {
+                if (!API || !API.isInitialized()) {
+                    alert('Please launch a SCO first to initialize the API');
+                    return;
+                }
                 if (data.item.value) {
                     setElement('nav.event', data.item.value);
                     API.LMSFinish("");
@@ -460,6 +769,10 @@
         });
 
         $("#create-interactions").on('click', function(e) {
+            if (!API || !API.isInitialized()) {
+                alert('Please launch a SCO first to initialize the API');
+                return;
+            }
             interactionsDialog.dialog("open");
             $("#interaction-number").val(getElement("cmi.interactions._count"));
         });
@@ -485,12 +798,16 @@
             },
         });
         $("#create-objectives").on('click', function(e) {
+            if (!API || !API.isInitialized()) {
+                alert('Please launch a SCO first to initialize the API');
+                return;
+            }
             objectivesDialog.dialog("open");
             $("#objective-number").val(getElement("cmi.objectives._count"));
         });
 
         $("#launch-tests").button().on('click', function(e) {
-            launchTests()
+            launchTests();
         });
 
     });

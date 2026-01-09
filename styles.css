@@ -1,24 +1,516 @@
-#log {
-    font-size: 9px;
-    width: 100%;
+/* ==========================================
+   Base styles
+   ========================================== */
+
+* {
+    box-sizing: border-box;
 }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+h1 {
+    margin: 0 0 10px 0;
+    color: #333;
+}
+
+h2 {
+    margin: 0 0 15px 0;
+    font-size: 1.2em;
+    color: #444;
+}
+
+/* ==========================================
+   Load Zone (initial dropzone screen)
+   ========================================== */
+
+#load-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 40px;
+    padding-bottom: 80px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    position: relative;
+}
+
+#load-zone h1 {
+    color: white;
+    font-size: 2.5em;
+    margin-bottom: 10px;
+}
+
+#load-zone > p {
+    font-size: 1.1em;
+    opacity: 0.9;
+    margin-bottom: 30px;
+}
+
+#dropzone {
+    width: 100%;
+    max-width: 500px;
+    padding: 60px 40px;
+    border: 3px dashed rgba(255, 255, 255, 0.5);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+#dropzone:hover {
+    border-color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+#dropzone.dragover {
+    border-color: white;
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.02);
+}
+
+.upload-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+    opacity: 0.9;
+}
+
+#dropzone-content p {
+    margin: 5px 0;
+}
+
+#dropzone-content p.hint {
+    font-size: 0.85em;
+    opacity: 0.7;
+    margin-top: 15px;
+}
+
+#file-input {
+    display: none;
+}
+
+#load-error {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background: #ff6b6b;
+    border-radius: 8px;
+    color: white;
+    font-weight: bold;
+}
+
+#load-error:empty {
+    display: none;
+}
+
+#load-progress {
+    margin-top: 20px;
+    padding: 10px 20px;
+    color: white;
+    font-size: 1.1em;
+}
+
+#load-progress:empty {
+    display: none;
+}
+
+.load-zone-footer {
+    position: absolute;
+    bottom: 30px;
+    left: 0;
+    right: 0;
+    text-align: center;
+}
+
+.load-zone-footer small {
+    opacity: 0.8;
+    font-size: 0.85em;
+}
+
+.load-zone-footer a {
+    color: white;
+    text-decoration: none;
+}
+
+.load-zone-footer a:hover {
+    text-decoration: underline;
+}
+
+/* ==========================================
+   Main Container (after package loads)
+   ========================================== */
+
+#main-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* ==========================================
+   Toolbar
+   ========================================== */
+
+#toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-bottom: 1px solid #5a67d8;
+    color: white;
+    flex-shrink: 0;
+}
+
+#toolbar-left, #toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#package-name {
+    font-weight: bold;
+    padding: 5px 12px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+#sco-selector {
+    padding: 6px 10px;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.9em;
+    min-width: 200px;
+}
+
+#toolbar button {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#launch-btn {
+    background: #48bb78;
+    color: white;
+}
+
+#launch-btn:hover:not(:disabled) {
+    background: #38a169;
+}
+
+#launch-btn:disabled {
+    background: #a0aec0;
+    cursor: not-allowed;
+}
+
+#reset-btn {
+    background: #ed8936;
+    color: white;
+}
+
+#reset-btn:hover {
+    background: #dd6b20;
+}
+
+#load-another {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+}
+
+#load-another:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.github-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+    padding: 4px;
+}
+
+.github-link:hover {
+    opacity: 1;
+}
+
+#api-status {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+}
+
+.status-initialized {
+    background: #48bb78;
+    color: white;
+}
+
+.status-not-initialized {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+/* ==========================================
+   Split View (content + debugger)
+   ========================================== */
+
+#split-view {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Content Panel (left) */
+#content-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #f7fafc;
+    min-width: 200px;
+}
+
+#content-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #718096;
+    font-size: 1.1em;
+    text-align: center;
+    padding: 40px;
+}
+
+#sco-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: white;
+}
+
+/* Resizer */
+#resizer {
+    width: 6px;
+    background: #e2e8f0;
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+}
+
+#resizer:hover {
+    background: #667eea;
+}
+
+/* Debugger Panel (right) */
+#debugger-panel {
+    width: 550px;
+    min-width: 300px;
+    overflow: auto;
+    background: white;
+    border-left: 1px solid #e2e8f0;
+}
+
+/* ==========================================
+   Tabs and Debugger Content
+   ========================================== */
+
+#options-tabs {
+    height: 100%;
+}
+
+#options-tabs > .ui-tabs-nav {
+    background: #f7fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 5px 10px 0;
+}
+
+#options-tabs > .ui-tabs-panel {
+    padding: 15px;
+    overflow: auto;
+    height: calc(100% - 50px);
+}
+
+/* ==========================================
+   Form Elements
+   ========================================== */
 
 fieldset {
     border: 0;
-    margin-left: 20px;
-}
-label {
-    display: block;
-    margin: 20px 0 0 0;
-}
-select {
-    width: 200px;
+    margin-left: 0;
+    padding: 0;
 }
 
+label {
+    display: block;
+    margin: 15px 0 5px 0;
+    font-weight: 500;
+    color: #4a5568;
+}
+
+select {
+    width: 200px;
+    padding: 6px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+}
+
+input[type="text"] {
+    padding: 6px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+}
+
+/* ==========================================
+   DataTable styling
+   ========================================== */
+
+#elementstable {
+    font-size: 0.85em;
+}
+
+#elementstable th {
+    background: #f7fafc;
+}
+
+/* ==========================================
+   Log Dialog
+   ========================================== */
+
+#log {
+    font-size: 11px;
+    font-family: "Monaco", "Menlo", "Consolas", monospace;
+    width: 100%;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+#log p {
+    margin: 3px 0;
+    padding: 3px 5px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+/* ==========================================
+   UI Widget overrides
+   ========================================== */
+
 .ui-widget {
-    font-size: 80%;
+    font-size: 90%;
 }
 
 .ui-helper-reset {
-    font-size: 80%;
+    font-size: 90%;
+}
+
+.ui-dialog {
+    z-index: 1000;
+}
+
+/* ==========================================
+   Buttons in debugger panel
+   ========================================== */
+
+#debugger-panel button,
+#remote-data button,
+#common-operations button,
+#interactions button,
+#tests button,
+#debugger button {
+    padding: 6px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    font-size: 0.9em;
+    margin-right: 5px;
+    transition: all 0.2s ease;
+}
+
+#debugger-panel button:hover,
+#remote-data button:hover,
+#common-operations button:hover,
+#interactions button:hover,
+#tests button:hover,
+#debugger button:hover {
+    background: #f7fafc;
+    border-color: #667eea;
+}
+
+/* ==========================================
+   Test output
+   ========================================== */
+
+#tests-output {
+    margin: 15px 0;
+    padding: 15px;
+    background: #f7fafc;
+    border-radius: 4px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-size: 0.9em;
+}
+
+#tests-output p {
+    margin: 5px 0;
+}
+
+/* ==========================================
+   Debugger element info
+   ========================================== */
+
+#debugger-element-description {
+    margin-top: 15px;
+    padding: 15px;
+    background: #f7fafc;
+    border-radius: 4px;
+}
+
+#debugger-element-description p {
+    margin: 5px 0;
+}
+
+#debugger-element-value {
+    margin-top: 15px;
+    padding: 10px 15px;
+    background: #edf2f7;
+    border-radius: 4px;
+    font-family: "Monaco", "Menlo", "Consolas", monospace;
+}
+
+/* ==========================================
+   Responsive adjustments
+   ========================================== */
+
+@media (max-width: 900px) {
+    #split-view {
+        flex-direction: column;
+    }
+
+    #content-panel {
+        height: 50%;
+        min-height: 200px;
+    }
+
+    #resizer {
+        width: 100%;
+        height: 6px;
+        cursor: row-resize;
+    }
+
+    #debugger-panel {
+        width: 100%;
+        height: 50%;
+    }
 }
